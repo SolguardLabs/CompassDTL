@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run fixture",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/compassdtl",
+      "args": ["run", "tests/fixtures/priority_settlement.json"]
+    },
+    {
+      "name": "Serve API",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/compassdtl",
+      "args": ["serve", "--addr", "127.0.0.1:8087"]
+    }
+  ]
+}

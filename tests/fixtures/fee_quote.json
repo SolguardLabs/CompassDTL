@@ -1,0 +1,20 @@
+{
+  "name": "fee quote",
+  "actions": [
+    {
+      "type": "submit",
+      "label": "ticket",
+      "intent": {
+        "id": "intent:fee-001",
+        "sourceAccount": "acct:alice",
+        "destinationAccount": "acct:bob",
+        "sourceAsset": "usdc",
+        "destinationAsset": "eurc",
+        "amount": 100000,
+        "maxFee": 500,
+        "priority": "normal"
+      }
+    },
+    { "type": "snapshot", "label": "snapshot" }
+  ]
+}

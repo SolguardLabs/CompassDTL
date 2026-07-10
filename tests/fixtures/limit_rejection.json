@@ -1,0 +1,21 @@
+{
+  "name": "limit rejection",
+  "actions": [
+    {
+      "type": "submit",
+      "label": "oversized-ticket",
+      "expectError": "limit_exceeded",
+      "intent": {
+        "id": "intent:limit-001",
+        "sourceAccount": "acct:alice",
+        "destinationAccount": "acct:bob",
+        "sourceAsset": "usdc",
+        "destinationAsset": "eurc",
+        "amount": 900000,
+        "maxFee": 20000,
+        "priority": "normal"
+      }
+    },
+    { "type": "snapshot", "label": "snapshot" }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "priority settlement",
+  "actions": [
+    {
+      "type": "submit",
+      "label": "normal-ticket",
+      "intent": {
+        "id": "intent:settle-normal",
+        "sourceAccount": "acct:alice",
+        "destinationAccount": "acct:bob",
+        "sourceAsset": "usdc",
+        "destinationAsset": "eurc",
+        "amount": 100000,
+        "maxFee": 500,
+        "priority": "normal"
+      }
+    },
+    {
+      "type": "submit",
+      "label": "urgent-ticket",
+      "intent": {
+        "id": "intent:settle-urgent",
+        "sourceAccount": "acct:alice",
+        "destinationAccount": "acct:bob",
+        "sourceAsset": "usdc",
+        "destinationAsset": "eurc",
+        "amount": 100000,
+        "maxFee": 500,
+        "priority": "urgent"
+      }
+    },
+    { "type": "advance_epoch", "label": "ready", "delta": 1 },
+    { "type": "execute", "label": "first-execution", "count": 1 },
+    { "type": "snapshot", "label": "snapshot" }
+  ]
+}

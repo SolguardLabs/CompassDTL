@@ -1,0 +1,34 @@
+{
+  "name": "route selection",
+  "actions": [
+    {
+      "type": "quote",
+      "label": "quotes",
+      "intent": {
+        "id": "intent:select-001",
+        "sourceAccount": "acct:alice",
+        "destinationAccount": "acct:bob",
+        "sourceAsset": "usdc",
+        "destinationAsset": "eurc",
+        "amount": 120000,
+        "maxFee": 2000,
+        "priority": "elevated"
+      }
+    },
+    {
+      "type": "submit",
+      "label": "ticket",
+      "intent": {
+        "id": "intent:select-001",
+        "sourceAccount": "acct:alice",
+        "destinationAccount": "acct:bob",
+        "sourceAsset": "usdc",
+        "destinationAsset": "eurc",
+        "amount": 120000,
+        "maxFee": 2000,
+        "priority": "elevated"
+      }
+    },
+    { "type": "snapshot", "label": "snapshot" }
+  ]
+}

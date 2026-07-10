@@ -1,0 +1,10 @@
+{
+  "editor.formatOnSave": true,
+  "files.exclude": {
+    "bin": true,
+    "node_modules": true,
+    "coverage": true
+  },
+  "go.testFlags": ["-count=1"],
+  "typescript.tsdk": "node_modules/typescript/lib"
+}
