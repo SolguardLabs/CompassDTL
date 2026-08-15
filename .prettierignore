@@ -3,4 +3,7 @@ coverage/
 dist/
 node_modules/
 package-lock.json
-vulnerability.md
+assets/
+src/
+cmd/
+tests/private/

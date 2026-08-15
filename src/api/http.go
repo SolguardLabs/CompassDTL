@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -13,7 +14,7 @@ type Handler struct {
 }
 
 func NewHTTPHandler(service *Service) http.Handler {
-	return Handler{Service: service}
+	return withSecurityHeaders(Handler{Service: service})
 }
 
 func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -116,10 +117,15 @@ func (h Handler) handleEpoch(w http.ResponseWriter, r *http.Request) {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBodyBytes)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		writeError(w, http.StatusBadRequest, domain.Invalid("invalid json body"))
+		return false
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeError(w, http.StatusBadRequest, domain.Invalid("json body must contain one object"))
 		return false
 	}
 	return true
