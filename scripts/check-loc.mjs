@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const src = join(root, "src");
-const min = 3000;
-const max = 4000;
+const min = 4000;
+const max = 5000;
 let lines = 0;
 
 function walk(dir) {

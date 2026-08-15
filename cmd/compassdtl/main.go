@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/solguardlabs/compassdtl/src/api"
@@ -73,7 +72,8 @@ func serve(args []string) {
 		log.Fatal(err)
 	}
 	log.Printf("CompassDTL listening on http://%s", *addr)
-	log.Fatal(http.ListenAndServe(*addr, api.NewHTTPHandler(service)))
+	server := api.NewProductionServer(*addr, api.NewHTTPHandler(service))
+	log.Fatal(server.ListenAndServe())
 }
 
 func writeDefault() {

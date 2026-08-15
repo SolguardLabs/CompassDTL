@@ -5,16 +5,24 @@
   "type": "module",
   "scripts": {
     "build": "go build -o bin/compassdtl ./cmd/compassdtl",
-    "test": "tsx --test \"tests/node/*.test.ts\"",
-    "check": "tsc --noEmit",
-    "format": "prettier --check .",
+    "test:go": "go test ./...",
+    "test:node": "tsx --test \"tests/node/*.test.ts\"",
+    "test": "npm run test:go && npm run test:node",
+    "check": "tsc --noEmit && go vet ./...",
+    "format:check": "prettier --check . && node scripts/check-gofmt.mjs",
+    "format:write": "prettier --write . && gofmt -w cmd src",
     "loc": "node scripts/check-loc.mjs",
-    "ci": "bash scripts/ci.sh"
+    "verify:repo": "node scripts/verify-repository.mjs",
+    "audit:deps": "npm audit --omit=dev --audit-level=high",
+    "ci": "npm run format:check && npm run check && npm run test && npm run build && npm run verify:repo && npm run audit:deps"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
     "prettier": "^3.9.6",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
