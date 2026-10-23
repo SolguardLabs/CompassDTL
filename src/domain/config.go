@@ -70,6 +70,8 @@ type Route struct {
 	BaseFeeBps         int64       `json:"baseFeeBps"`
 	OperatorFeeBps     int64       `json:"operatorFeeBps"`
 	MinFee             int64       `json:"minFee"`
+	FXRatePPM          int64       `json:"fxRatePpm"`
+	LiquidityImpactBPS int64       `json:"liquidityImpactBps"`
 	Liquidity          int64       `json:"liquidity"`
 	MaxExposure        int64       `json:"maxExposure"`
 	MaxTicketSize      int64       `json:"maxTicketSize"`
@@ -110,6 +112,15 @@ func (r Route) Validate() error {
 	if r.MinFee < 0 {
 		return Invalid("route min fee cannot be negative")
 	}
+	if r.FXRatePPM != 0 && (r.FXRatePPM < 500_000 || r.FXRatePPM > 2_000_000) {
+		return Invalid("route FX rate must be within 0.5 and 2.0")
+	}
+	if r.SourceAsset == r.DestinationAsset && r.EffectiveFXRatePPM() != 1_000_000 {
+		return Invalid("same-asset route must use numeric parity")
+	}
+	if r.LiquidityImpactBPS < 0 || r.LiquidityImpactBPS > 5_000 {
+		return Invalid("route liquidity impact must be within 0 and 5000 bps")
+	}
 	if r.Liquidity < 0 {
 		return Invalid("route liquidity cannot be negative")
 	}
@@ -120,6 +131,13 @@ func (r Route) Validate() error {
 		return Invalid("route maxTicketSize must be positive")
 	}
 	return nil
+}
+
+func (r Route) EffectiveFXRatePPM() int64 {
+	if r.FXRatePPM == 0 {
+		return 1_000_000
+	}
+	return r.FXRatePPM
 }
 
 func (r Route) Accepts(asset AssetID, dest AssetID) bool {

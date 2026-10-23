@@ -46,6 +46,7 @@ graph LR
     SETTLEMENT["settlement"] --> LEDGER
     SETTLEMENT --> RISK
     SETTLEMENT --> ROUTING
+    SETTLEMENT --> CAPITAL["capital"]
     API["api"] --> SETTLEMENT
     API --> ROUTING
     API --> LEDGER
@@ -53,8 +54,9 @@ graph LR
 ```
 
 Los paquetes `capital`, `governance` y `observability` no dependen de la capa
-HTTP. Pueden ejecutarse en procesos de control, tareas programadas o pipelines
-de aprobacion sin duplicar reglas.
+HTTP. `capital` participa además en la comprobación previa al pago cuando
+permanecen tickets de la misma ruta en cola; sus cálculos pueden repetirse en
+procesos de control sin duplicar la fórmula.
 
 ## Consistencia De Estado
 
@@ -69,13 +71,16 @@ sequenceDiagram
     participant Queue
     participant Catalog
     participant Risk
+    participant Capital
     API->>Ledger: reservar debito total
     Ledger-->>API: asientos de reserva
     API->>Queue: insertar ticket
     Queue-->>API: secuencia estable
+    API->>Risk: admitir exposición viva
+    API->>Capital: evaluar cobertura de cola
     API->>Catalog: consumir liquidez
     API->>Ledger: contabilizar settlement
-    API->>Risk: aplicar exposicion
+    API->>Risk: conservar exposición asentada
     API-->>API: emitir recibo y evento
 ```
 

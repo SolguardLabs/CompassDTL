@@ -2,9 +2,12 @@ package settlement
 
 import (
 	"fmt"
+	"math"
 	"sync"
 
+	"github.com/solguardlabs/compassdtl/src/capital"
 	"github.com/solguardlabs/compassdtl/src/domain"
+	"github.com/solguardlabs/compassdtl/src/fees"
 	"github.com/solguardlabs/compassdtl/src/ledger"
 	"github.com/solguardlabs/compassdtl/src/risk"
 	"github.com/solguardlabs/compassdtl/src/routing"
@@ -69,11 +72,18 @@ func (e *Engine) Enqueue(plan domain.SettlementPlan, epoch uint64) (domain.Settl
 }
 
 func (e *Engine) ExecuteReady(epoch uint64, count uint64) ([]domain.SettlementReceipt, []domain.SettlementTicket, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if count == 0 {
 		count = 1
 	}
 	receipts := make([]domain.SettlementReceipt, 0, count)
 	skipped := e.Queue.RemoveExpired(epoch)
+	for _, ticket := range skipped {
+		if err := e.releaseTicket(ticket, epoch); err != nil {
+			return receipts, skipped, err
+		}
+	}
 	for uint64(len(receipts)) < count {
 		ticket, ok := e.Queue.PopReady(epoch)
 		if !ok {
@@ -81,6 +91,9 @@ func (e *Engine) ExecuteReady(epoch uint64, count uint64) ([]domain.SettlementRe
 		}
 		receipt, err := e.executeTicket(ticket, epoch)
 		if err != nil {
+			if releaseErr := e.releaseTicket(ticket, epoch); releaseErr != nil {
+				return receipts, skipped, releaseErr
+			}
 			ticket.Status = domain.TicketRejected
 			ticket.RejectionReason = err.Error()
 			ticket.LastUpdatedAt = epoch
@@ -115,6 +128,31 @@ func (e *Engine) executeTicket(ticket domain.SettlementTicket, epoch uint64) (do
 	}
 	if route.SettlementAccount == "" || route.TreasuryAccount == "" || route.FeeAccount == "" {
 		return domain.SettlementReceipt{}, domain.Invalid("route settlement accounts are incomplete")
+	}
+	expectedPayout, err := fees.DestinationAmount(ticket.Plan.Intent, route)
+	if err != nil || ticket.Plan.Quote.RouteID != route.ID ||
+		ticket.Plan.Quote.Corridor != route.Corridor ||
+		ticket.Plan.Quote.DestinationAmount != expectedPayout {
+		return domain.SettlementReceipt{}, domain.Invalid("ticket quote does not match executable route")
+	}
+	if e.Book.Reserved(ticket.Plan.Intent.SourceAccount, ticket.Plan.Intent.SourceAsset) < ticket.TotalDebit() {
+		return domain.SettlementReceipt{}, domain.Insufficient("ticket source reserve is unavailable")
+	}
+	if e.Book.Available(route.SettlementAccount, route.DestinationAsset) < ticket.Plan.Quote.DestinationAmount {
+		return domain.SettlementReceipt{}, domain.Insufficient("route settlement account is underfunded")
+	}
+	_, err = e.Risk.AdmitExecution(ticket.Plan.Intent, route, ticket.Plan.Quote, epoch, e.Policy.TTL)
+	if err != nil {
+		return domain.SettlementReceipt{}, err
+	}
+	riskBooked := true
+	defer func() {
+		if riskBooked {
+			_ = e.Risk.RevertExecution(route, ticket.Plan.Intent.Amount)
+		}
+	}()
+	if err := e.checkQueuedCoverage(route, ticket); err != nil {
+		return domain.SettlementReceipt{}, err
 	}
 	consumedRoute, err := e.Catalog.ConsumeLiquidity(route.ID, ticket.Plan.Quote.DestinationAmount)
 	if err != nil {
@@ -165,11 +203,6 @@ func (e *Engine) executeTicket(ticket domain.SettlementTicket, epoch uint64) (do
 		return domain.SettlementReceipt{}, err
 	}
 	entries = append(entries, feeEntries...)
-	if err := e.Risk.ApplySettlement(route, ticket.Plan.Intent.Amount); err != nil {
-		return domain.SettlementReceipt{}, err
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.receiptSeq++
 	receipt := domain.SettlementReceipt{
 		ID:                domain.NewReceiptID(ticket.ID, e.receiptSeq),
@@ -184,7 +217,67 @@ func (e *Engine) executeTicket(ticket domain.SettlementTicket, epoch uint64) (do
 		LedgerEntries:     entries,
 	}
 	e.Receipts = append(e.Receipts, receipt)
+	riskBooked = false
 	return receipt, nil
+}
+
+func (e *Engine) releaseTicket(ticket domain.SettlementTicket, epoch uint64) error {
+	_, err := e.Book.Release(
+		ticket.Plan.Intent.SourceAccount,
+		ticket.Plan.Intent.SourceAsset,
+		ticket.TotalDebit(),
+		"ticket reserve released",
+		epoch,
+		ledger.Refs(ticket.ID, ticket.RouteID()),
+	)
+	return err
+}
+
+func (e *Engine) checkQueuedCoverage(route domain.Route, ticket domain.SettlementTicket) error {
+	var queuedPrincipal int64
+	for _, pending := range e.Queue.Tickets() {
+		if pending.RouteID() != route.ID {
+			continue
+		}
+		if pending.Plan.Quote.DestinationAmount > math.MaxInt64-queuedPrincipal {
+			return domain.Invalid("queued principal exceeds supported amount")
+		}
+		queuedPrincipal += pending.Plan.Quote.DestinationAmount
+	}
+	if queuedPrincipal == 0 {
+		return nil
+	}
+	liquidBacking := domain.MinInt64(
+		route.Liquidity,
+		e.Book.Available(route.SettlementAccount, route.DestinationAsset),
+	)
+	remaining := liquidBacking - ticket.Plan.Quote.DestinationAmount
+	if remaining < 0 {
+		return domain.Insufficient("route liquidity cannot cover the current payout")
+	}
+	limit, ok := e.Risk.RouteLimit(route.ID)
+	if !ok {
+		return domain.NotFound("route risk limit is unavailable")
+	}
+	metrics, err := capital.EvaluateRoute(capital.RouteInput{
+		RouteID:               route.ID,
+		Corridor:              route.Corridor,
+		Liquidity:             remaining,
+		Exposure:              e.Risk.RouteExposure(route.ID),
+		MaxExposure:           limit.MaxExposure,
+		QueuedPrincipal:       queuedPrincipal,
+		SettlementDelayEpochs: route.SettlementDelay,
+		LiquidityHaircutBPS:   500,
+		SettlementShockBPS:    1_000,
+		OperationalBufferBPS:  200,
+	})
+	if err != nil {
+		return domain.Invalid(fmt.Sprintf("queued coverage evaluation failed: %v", err))
+	}
+	if !metrics.Compliant {
+		return domain.LimitExceeded("queued settlement coverage is below policy")
+	}
+	return nil
 }
 
 func queueScore(plan domain.SettlementPlan) int64 {

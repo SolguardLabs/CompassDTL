@@ -19,7 +19,7 @@ for (const entry of required) {
 }
 
 const docs = readdirSync(join(root, "docs")).filter((name) => name.endsWith(".md"));
-if (docs.length !== 7) fail(`expected exactly 7 operational documents, found ${docs.length}`);
+if (docs.length !== 8) fail(`expected exactly 8 operational documents, found ${docs.length}`);
 
 const bannerHash = createHash("sha256")
   .update(readFileSync(join(root, "assets", "banner.png")))

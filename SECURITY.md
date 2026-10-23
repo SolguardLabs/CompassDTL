@@ -8,7 +8,8 @@ limites conservadores y trazabilidad completa de cada cambio economico.
 
 | Version   | Estado           |
 | --------- | ---------------- |
-| `1.0.x`   | mantenida        |
+| `2.0.x`   | mantenida        |
+| `1.0.x`   | historial        |
 | `< 1.0.0` | fuera de soporte |
 
 ## Fronteras De Confianza
@@ -40,6 +41,9 @@ recalcula comisiones, valida identificadores y aplica limites enteros.
 - los cambios de gobierno tienen dominio, red, payload, salt y ventana temporal;
 - la capacidad reconocida nunca se redondea al alza;
 - los requisitos de liquidez nunca se redondean a la baja.
+- los pagos usan la cotización de destino vinculada a la ruta vigente;
+- la curva de inventario solo admite parámetros acotados y aritmética entera;
+- las reservas de tickets rechazados o expirados vuelven al originador.
 
 ```mermaid
 flowchart TD
@@ -49,7 +53,7 @@ flowchart TD
     Q --> R{"Reserva suficiente"}
     R -->|"no"| X
     R -->|"si"| T["Ticket en cola"]
-    T --> E{"Condiciones de ejecucion"}
+    T --> E{"Riesgo vivo y capital de cola"}
     E -->|"no"| Z["Rechazado o expirado"]
     E -->|"si"| P["Asientos y recibo"]
 ```

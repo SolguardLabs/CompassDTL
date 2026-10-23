@@ -27,6 +27,21 @@ debito_total = principal + fee_base + fee_operador + fee_red
 Cada componente se calcula en enteros. `maxFee` establece el limite aceptado
 por el originador.
 
+La ruta publica una tasa `fxRatePpm` en partes por millón. Una tasa ausente se
+interpreta como 1.000.000 ppm. El importe cotizado en destino se obtiene con
+aritmética entera y redondeo hacia abajo:
+
+```text
+bruto_destino = floor(principal_origen × fxRatePpm / 1.000.000)
+cotizacion_neta = bruto_destino - cargo_de_inventario
+```
+
+El score de liquidez y el débito de la cuenta de settlement se expresan en el
+activo de destino. La curva de impacto de inventario es configurable por ruta
+y determina la cotización neta antes de crear el ticket; el coste y la
+exposición de crédito se expresan en el activo de origen. Véase
+[Cotización FX y cobertura de cola](08-fx-liquidez.md).
+
 ## Score De Ruta
 
 ```text
@@ -115,3 +130,11 @@ interpretarse junto con cobertura, liquidez, vencimiento y correlacion.
 `BuildStressGrid` cruza recortes y shocks sin usar coma flotante. Un escenario
 mas severo no debe aumentar capacidad ni cobertura si el resto permanece fijo.
 La matriz se usa para limites preventivos y planificacion de reservas.
+
+Durante la ejecución, la admisión se repite frente a los límites vivos de ruta
+y corredor. Si quedan tickets de la misma ruta, el modelo de capital valora la
+liquidez después del pago actual, aplica un recorte de 500 bps, un shock de
+1.000 bps sobre la cola y un buffer operativo de 200 bps sobre la exposición.
+Una evaluación no conforme impide el desembolso. El reporte de cartera y su
+HHI siguen siendo herramientas de seguimiento, no equivalentes a una garantía
+de solvencia de cada obligación.
