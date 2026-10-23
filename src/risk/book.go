@@ -2,6 +2,7 @@ package risk
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 
@@ -91,12 +92,16 @@ func (b *Book) UpdateRouteLimit(route domain.Route) error {
 func (b *Book) Authorize(intent domain.Intent, route domain.Route, quote domain.RouteQuote, epoch uint64, ttl uint64) domain.RiskAdmission {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	return b.authorizeLocked(intent, route, quote, epoch, ttl)
+}
+
+func (b *Book) authorizeLocked(intent domain.Intent, route domain.Route, quote domain.RouteQuote, epoch uint64, ttl uint64) domain.RiskAdmission {
 	routeLimit := b.routeLimits[route.ID]
 	corridorLimit := b.corridorLimits[route.Corridor]
 	routeBefore := b.routeExposure[route.ID]
 	corridorBefore := b.corridorExposure[route.Corridor]
-	routeAfter := routeBefore + intent.Amount
-	corridorAfter := corridorBefore + intent.Amount
+	routeAfter := routeBefore
+	corridorAfter := corridorBefore
 	admission := domain.RiskAdmission{
 		RouteID:             route.ID,
 		Corridor:            route.Corridor,
@@ -120,6 +125,18 @@ func (b *Book) Authorize(intent domain.Intent, route domain.Route, quote domain.
 		admission.Reason = "corridor limit is not configured"
 		return admission
 	}
+	if intent.Amount <= 0 ||
+		routeBefore > math.MaxInt64-intent.Amount ||
+		corridorBefore > math.MaxInt64-intent.Amount ||
+		b.corridorDailyGross[route.Corridor] > math.MaxInt64-intent.Amount {
+		admission.Granted = false
+		admission.Reason = "exposure arithmetic exceeds supported amount"
+		return admission
+	}
+	routeAfter += intent.Amount
+	corridorAfter += intent.Amount
+	admission.ExposureAfter = routeAfter
+	admission.CorridorAfter = corridorAfter
 	if intent.Amount > routeLimit.MaxTicketSize {
 		admission.Granted = false
 		admission.Reason = "ticket exceeds route max size"
@@ -142,6 +159,36 @@ func (b *Book) Authorize(intent domain.Intent, route domain.Route, quote domain.
 	}
 	admission.Reason = "admitted"
 	return admission
+}
+
+func (b *Book) AdmitExecution(intent domain.Intent, route domain.Route, quote domain.RouteQuote, epoch uint64, ttl uint64) (domain.RiskAdmission, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	admission := b.authorizeLocked(intent, route, quote, epoch, ttl)
+	if !admission.Granted {
+		return admission, domain.LimitExceeded(admission.Reason)
+	}
+	b.routeExposure[route.ID] = admission.ExposureAfter
+	b.corridorExposure[route.Corridor] = admission.CorridorAfter
+	b.corridorDailyGross[route.Corridor] += intent.Amount
+	return admission, nil
+}
+
+func (b *Book) RevertExecution(route domain.Route, amount int64) error {
+	if amount < 0 {
+		return domain.Invalid("settlement reversal amount cannot be negative")
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.routeExposure[route.ID] < amount ||
+		b.corridorExposure[route.Corridor] < amount ||
+		b.corridorDailyGross[route.Corridor] < amount {
+		return domain.Invalid("settlement reversal exceeds booked exposure")
+	}
+	b.routeExposure[route.ID] -= amount
+	b.corridorExposure[route.Corridor] -= amount
+	b.corridorDailyGross[route.Corridor] -= amount
+	return nil
 }
 
 func (b *Book) ApplySettlement(route domain.Route, amount int64) error {

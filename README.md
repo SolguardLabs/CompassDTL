@@ -16,9 +16,11 @@ capital con precision arbitraria.
 
 - seleccion multicriterio de rutas y corredores;
 - reservas contables de principal y comisiones;
+- cotización entre activos mediante tasas enteras y curva de impacto de inventario;
 - cola estable por prioridad, score, disponibilidad y secuencia;
 - limites de exposicion por ruta, corredor y volumen diario;
 - modelo de capital con recortes, shocks, buffers y capacidad disponible;
+- admisión de riesgo viva y comprobación de cobertura de la cola antes del pago;
 - metricas de concentracion HHI y vencimiento ponderado;
 - gobierno diferido con quorum, timelock, expiracion y predecesores;
 - API JSON endurecida y SDK TypeScript con idempotencia;
@@ -35,9 +37,11 @@ flowchart LR
     SEL --> FEE["Motor de comisiones"]
     API --> QUEUE["Cola de settlement"]
     QUEUE --> ENG["Motor de ejecucion"]
+    ENG --> CAP["Cobertura de cola"]
     ENG --> LEDGER["Libro contable"]
     ENG --> RISK
     ENG --> CAT
+    CAP --> RISK
     LEDGER --> SNAP["Snapshot y recibos"]
     RISK --> SNAP
     CAT --> SNAP
@@ -50,6 +54,7 @@ sequenceDiagram
     participant S as Selector
     participant Q as Cola
     participant E as Settlement
+    participant R as Riesgo y capital
     participant L as Ledger
     T->>A: POST /v1/intents
     A->>S: cotizar y seleccionar
@@ -59,6 +64,8 @@ sequenceDiagram
     A-->>T: 202 + ticket
     T->>A: POST /v1/execute
     A->>E: ejecutar disponibles
+    E->>R: admisión viva + cobertura de cola
+    R-->>E: resultado previo al desembolso
     E->>L: payout + reembolso + fee
     E-->>A: recibo contable
     A-->>T: snapshot final
@@ -104,6 +111,8 @@ HHI = sum(share_i^2) * 10_000
 
 Todos los redondeos que incrementan necesidades se realizan hacia arriba; los
 que reconocen recursos o capacidad, hacia abajo.
+
+La cotización bruta de un par de activos usa `bruto_destino = floor(origen × fxRatePpm / 1.000.000)`. El valor por defecto de la tasa es 1.000.000 ppm. Una ruta puede aplicar después una curva de impacto de inventario (`liquidityImpactBps`, entre 0 y 5.000) para fijar la cotización neta. El activo de origen financia principal y comisiones; el de destino determina el pago y la liquidez de la ruta. Antes de ejecutar, el motor vuelve a comprobar límites vivos de exposición y calcula la cobertura de los tickets que permanecerán en cola. Un ticket rechazado o expirado libera la reserva del originador.
 
 ## Ciclo De Un Ticket
 
@@ -215,6 +224,7 @@ limita el tamaño de respuesta y serializa `bigint` como decimal exacto.
 
 - [Arquitectura](./docs/01-arquitectura.md)
 - [Modelo economico](./docs/02-modelo-economico.md)
+- [Cotización FX y cobertura de cola](./docs/08-fx-liquidez.md)
 - [Seguridad operativa](./docs/03-seguridad-operativa.md)
 - [API y SDK](./docs/04-api-sdk.md)
 - [Operacion](./docs/05-operacion.md)
@@ -243,7 +253,7 @@ tests/               contratos funcionales y de distribucion
 
 `npm run ci` comprueba formato, tipos, `go vet`, pruebas Go y Node.js,
 compilacion, identidad visual, documentacion, diagramas y dependencias. La rama
-`production` y la etiqueta anotada `v1.0.0` deben resolver al mismo commit que
+`production` y la etiqueta anotada `v2.0.0` deben resolver al mismo commit que
 `main`; la automatizacion de integridad valida esa relacion en cada entrega.
 
 ## Licencia

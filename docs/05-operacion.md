@@ -33,9 +33,9 @@ Para cada epoch:
 1. capturar snapshot;
 2. sumar saldos disponibles y reservados por activo;
 3. enlazar cada recibo con ticket e intent;
-4. comparar principal en cola con reservas del originador;
+4. comparar principal en cola con reservas del originador y cotizaciones de destino;
 5. comparar exposicion de ruta y corredor;
-6. revisar capacidad, cobertura, HHI y antiguedad de cola;
+6. revisar capacidad, cobertura, HHI, tasa FX y antiguedad de cola;
 7. almacenar commit, epoch y hash del snapshot.
 
 ```mermaid

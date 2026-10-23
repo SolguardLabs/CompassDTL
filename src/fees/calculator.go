@@ -1,6 +1,8 @@
 package fees
 
 import (
+	"math/big"
+
 	"github.com/solguardlabs/compassdtl/src/domain"
 )
 
@@ -63,11 +65,24 @@ func (c Calculator) priorityBps(priority domain.PriorityClass) int64 {
 	}
 }
 
-func DestinationAmount(intent domain.Intent, route domain.Route) int64 {
-	if intent.SourceAsset == route.DestinationAsset {
-		return intent.Amount
+func DestinationAmount(intent domain.Intent, route domain.Route) (int64, error) {
+	gross := new(big.Int).Mul(big.NewInt(intent.Amount), big.NewInt(route.EffectiveFXRatePPM()))
+	gross.Quo(gross, big.NewInt(1_000_000))
+	if route.LiquidityImpactBPS > 0 {
+		if route.Liquidity <= 0 {
+			return 0, domain.Insufficient("route has no pricing liquidity")
+		}
+		impact := new(big.Int).Mul(gross, big.NewInt(intent.Amount))
+		impact.Mul(impact, big.NewInt(route.LiquidityImpactBPS))
+		divisor := new(big.Int).Mul(big.NewInt(route.Liquidity), big.NewInt(10_000))
+		impact.Add(impact, new(big.Int).Sub(divisor, big.NewInt(1)))
+		impact.Quo(impact, divisor)
+		gross.Sub(gross, impact)
 	}
-	return intent.Amount
+	if !gross.IsInt64() || gross.Sign() <= 0 {
+		return 0, domain.Invalid("destination quote exceeds supported amount")
+	}
+	return gross.Int64(), nil
 }
 
 func TotalDebit(intent domain.Intent, breakdown domain.FeeBreakdown) int64 {

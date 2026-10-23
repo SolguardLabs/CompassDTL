@@ -19,13 +19,17 @@ func (s Scorer) Quote(intent domain.Intent, route domain.Route, exposures *risk.
 	if err != nil {
 		return domain.RouteQuote{}, err
 	}
+	payout, err := fees.DestinationAmount(intent, route)
+	if err != nil {
+		return domain.RouteQuote{}, err
+	}
 	exposure := exposures.RouteExposure(route.ID)
-	score := s.Score(intent, route, breakdown, exposure)
+	score := s.Score(intent, route, breakdown, exposure, payout)
 	return domain.RouteQuote{
 		RouteID:           route.ID,
 		Corridor:          route.Corridor,
 		Amount:            intent.Amount,
-		DestinationAmount: fees.DestinationAmount(intent, route),
+		DestinationAmount: payout,
 		Fees:              breakdown,
 		Score:             score,
 		ObservedExposure:  exposure,
@@ -35,8 +39,8 @@ func (s Scorer) Quote(intent domain.Intent, route domain.Route, exposures *risk.
 	}, nil
 }
 
-func (s Scorer) Score(intent domain.Intent, route domain.Route, breakdown domain.FeeBreakdown, exposure int64) domain.ScoreBreakdown {
-	liquidityScore := liquidityScore(route.Liquidity, intent.Amount)
+func (s Scorer) Score(intent domain.Intent, route domain.Route, breakdown domain.FeeBreakdown, exposure int64, payout int64) domain.ScoreBreakdown {
+	liquidityScore := liquidityScore(route.Liquidity, payout)
 	feeScore := feeScore(intent.Amount, breakdown.TotalFee)
 	latencyScore := latencyScore(route.SettlementDelay)
 	exposureScore := exposureScore(route, exposure)

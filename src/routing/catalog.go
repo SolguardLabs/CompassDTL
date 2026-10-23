@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/solguardlabs/compassdtl/src/domain"
+	"github.com/solguardlabs/compassdtl/src/fees"
 )
 
 type Catalog struct {
@@ -72,7 +73,8 @@ func (c *Catalog) Candidates(intent domain.Intent) []domain.Route {
 		if !route.Accepts(intent.SourceAsset, intent.DestinationAsset) {
 			continue
 		}
-		if route.Liquidity < intent.Amount {
+		payout, err := fees.DestinationAmount(intent, route)
+		if err != nil || route.Liquidity < payout {
 			continue
 		}
 		routes = append(routes, route)
